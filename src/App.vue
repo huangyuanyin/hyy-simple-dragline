@@ -1,9 +1,22 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import DragItem from './components/drag-item.vue'
 import { Dragline } from './feature/dragline'
 
 const dragline = new Dragline({
   activeClassName: 'active-item'
+})
+
+const containerEl = ref<HTMLDivElement | null>(null)
+
+onMounted(() => {
+  if (containerEl.value) {
+    dragline.registerDragContainer(containerEl.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  dragline.destoryAll()
 })
 </script>
 
