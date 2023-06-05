@@ -12,7 +12,35 @@ let destory: (() => void) | null = null
 onMounted(() => {
   if (dragItemRef.value) {
     destory = props.dragline.registerDragElement({
-      container: dragItemRef.value
+      container: dragItemRef.value,
+      onDrag(event, startPos) {
+        const { startX, startY, startLeft, startTop } = startPos
+        const { x, y } = event
+
+        const deltaX = x - startX
+        const deltaY = y - startY
+
+        dragItemRef.value!.style.left = `${startLeft + deltaX}px`
+        dragItemRef.value!.style.top = `${startTop + deltaY}px`
+
+        // 左右边界
+        if (startLeft + deltaX < 0) {
+          dragItemRef.value!.style.left = `0px`
+        }
+
+        if (startLeft + deltaX > props.dragline.dragContainer!.clientWidth - dragItemRef.value!.clientWidth) {
+          dragItemRef.value!.style.left = `${props.dragline.dragContainer!.clientWidth - dragItemRef.value!.clientWidth}px`
+        }
+
+        // 上下边界
+        if (startTop + deltaY < 0) {
+          dragItemRef.value!.style.top = `0px`
+        }
+
+        if (startTop + deltaY > props.dragline.dragContainer!.clientHeight - dragItemRef.value!.clientHeight) {
+          dragItemRef.value!.style.top = `${props.dragline.dragContainer!.clientHeight - dragItemRef.value!.clientHeight}px`
+        }
+      }
     })
   }
 })

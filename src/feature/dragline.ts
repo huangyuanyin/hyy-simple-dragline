@@ -1,8 +1,13 @@
-import { registerDragElement, DragElementOptions } from './drag-element'
+import { registerDragElement } from './drag-element'
+import type { DragElementOptions, StartPos } from './drag-element'
 
 interface DraglineOptions {
   activeClassName: string
   threshold: number
+  lineTypes?: LineType[]
+  preventDragultDrag?: boolean
+  draglineClassName?: string
+  alignedClassName?: string
 }
 
 interface ElementPosition {
@@ -12,17 +17,27 @@ interface ElementPosition {
   b: number
 }
 
+type Direction = keyof ElementPosition
+
+type LineType = 'tt' | 'bb' | 'll' | 'rr' | 'tb' | 'bt' | 'lr' | 'rl'
+
+const lineTypes: LineType[] = ['tt', 'bb', 'll', 'rr', 'tb', 'bt', 'lr', 'rl']
+
 export class Dragline {
   dragElements: HTMLElement[] = []
   activeElement: HTMLElement | null = null
   elementToPositionMap: Map<HTMLElement, ElementPosition> = new Map()
   destories: (() => void)[] = []
   dragContainer: HTMLElement | null = null
-  targetToLineMap: Map<HTMLElement, HTMLElement> = new Map()
+  targetToLineMap: Map<HTMLElement, Map<LineType, HTMLElement>> = new Map()
 
   options: DraglineOptions = {
     activeClassName: 'active',
-    threshold: 5
+    threshold: 5,
+    lineTypes,
+    preventDragultDrag: false,
+    draglineClassName: 'dragline',
+    alignedClassName: 'aligned-item'
   }
 
   constructor(options: Partial<DraglineOptions> = {}) {
@@ -50,16 +65,21 @@ export class Dragline {
     const onDragStart = (event: MouseEvent) => {
       this.setActiveElement(container)
       options.onDragStart?.(event)
+      this.calculateLine()
     }
 
     const onDragEnd = (event: MouseEvent) => {
       this.removeActiveElement()
       this.clearAllLine()
+      const otherElements = this.getOtheElements()
+      otherElements.forEach((el) => {
+        el.classList.remove(this.options.alignedClassName!)
+      })
       options.onDragEnd?.(event)
     }
 
-    const onDrag = (event: MouseEvent) => {
-      options.onDrag?.(event)
+    const onDrag = (event: MouseEvent, startPos: StartPos) => {
+      options.onDrag?.(event, startPos)
 
       this.updateElementPosition(container)
 
@@ -76,7 +96,7 @@ export class Dragline {
       onDrag
     }
 
-    const removeEventListener = registerDragElement(newOptions)
+    const removeEventListener = registerDragElement(newOptions, this.options.preventDragultDrag)
 
     const destory = () => {
       removeEventListener()
@@ -90,18 +110,29 @@ export class Dragline {
     return destory
   }
 
-  private clearAllLine() {
-    this.targetToLineMap.forEach((line) => {
-      line.remove()
-    })
+  private isHorizantal(lineType: LineType) {
+    if (lineType.includes('b') || lineType.includes('t')) {
+      return true
+    } else {
+      return false
+    }
+  }
 
+  private clearAllLine() {
+    this.targetToLineMap.forEach((lineTypeToLines) => {
+      lineTypeToLines.forEach((line) => {
+        line.remove()
+      })
+    })
     this.targetToLineMap.clear()
   }
 
   private clearTaegetLine(target: HTMLElement) {
-    const line = this.targetToLineMap.get(target)
-    if (line) {
-      line.remove()
+    const lineTypeToLines = this.targetToLineMap.get(target)
+    if (lineTypeToLines) {
+      lineTypeToLines.forEach((line) => {
+        line.remove()
+      })
       this.targetToLineMap.delete(target)
     }
   }
@@ -142,6 +173,14 @@ export class Dragline {
     }
   }
 
+  private createDraglineEl() {
+    const dragLineEl = document.createElement('div')
+    dragLineEl.style.position = 'absolute'
+    dragLineEl.style.boxSizing = 'border-box'
+    dragLineEl.classList.add(this.options.draglineClassName!)
+    return dragLineEl
+  }
+
   private calculateLine() {
     const otherElements = this.getOtheElements()
     const activeElPosition = this.elementToPositionMap.get(this.activeElement!)!
@@ -149,41 +188,82 @@ export class Dragline {
     this.dragContainer = this.dragContainer || (this.activeElement!.offsetParent as HTMLElement)
 
     otherElements.forEach((target) => {
-      const targetTop = target.offsetTop
-      const activeTop = this.activeElement!.offsetTop
       const targetElPosition = this.elementToPositionMap.get(target)!
 
-      if (Math.abs(targetTop - activeTop) < this.options.threshold) {
-        this.activeElement!.style.top = `${targetElPosition['t']}px`
+      this.options.lineTypes?.forEach((lineType) => {
+        const [activeDirection, targetDirection] = lineType.split('') as [Direction, Direction]
 
-        const xAxis = [activeElPosition.l, activeElPosition.r, targetElPosition.l, targetElPosition.r]
-        const minX = Math.min(...xAxis)
-        const maxX = Math.max(...xAxis)
+        if (Math.abs(targetElPosition[targetDirection] - activeElPosition[activeDirection]) < this.options.threshold) {
+          target.classList.add(this.options.alignedClassName!)
+          // 磁吸效果
+          if (this.isHorizantal(lineType)) {
+            this.activeElement!.style.top = `${
+              activeDirection === 'b' ? targetElPosition[targetDirection] - this.activeElement!.clientHeight : targetElPosition[targetDirection]
+            }px`
+          } else {
+            this.activeElement!.style.left = `${
+              activeDirection === 'r' ? targetElPosition[targetDirection] - this.activeElement!.clientWidth : targetElPosition[targetDirection]
+            }px`
+          }
 
-        let dragLineEl: HTMLElement
-        if (!this.targetToLineMap.has(target)) {
-          dragLineEl = document.createElement('div')
+          let dragLineEl: HTMLElement
+          if (!this.targetToLineMap.has(target)) {
+            const lineTypeToLines = new Map<LineType, HTMLElement>()
+            dragLineEl = this.createDraglineEl()
+            lineTypeToLines.set(lineType, dragLineEl)
+            this.targetToLineMap.set(target, lineTypeToLines)
+          } else {
+            const lineTypeToLines = this.targetToLineMap.get(target)!
+            if (lineTypeToLines.has(lineType)) {
+              dragLineEl = lineTypeToLines.get(lineType)!
+            } else {
+              dragLineEl = this.createDraglineEl()
+              lineTypeToLines.set(lineType, dragLineEl)
+            }
+          }
 
-          dragLineEl.style.position = 'absolute'
-          dragLineEl.style.boxSizing = 'border-box'
-          dragLineEl.style.borderBottom = '1px dashed #f00'
-          this.targetToLineMap.set(target, dragLineEl)
+          if (this.isHorizantal(lineType)) {
+            const xAxis = [activeElPosition.l, activeElPosition.r, targetElPosition.l, targetElPosition.r]
+            const minX = Math.min(...xAxis)
+            const maxX = Math.max(...xAxis)
+
+            const dragLineElWidth = maxX - minX
+            dragLineEl.style.height = '0px'
+            dragLineEl.style.width = `${dragLineElWidth}px`
+            dragLineEl.style.top = `${targetElPosition[targetDirection]}px`
+            dragLineEl.style.left = `${minX}px`
+
+            dragLineEl.style.borderBottom = '1px dashed #f00'
+          } else {
+            const yAxis = [activeElPosition.t, activeElPosition.b, targetElPosition.t, targetElPosition.b]
+            const minY = Math.min(...yAxis)
+            const maxY = Math.max(...yAxis)
+
+            const dragLineElHeight = maxY - minY
+            dragLineEl.style.width = '0px'
+            dragLineEl.style.height = `${dragLineElHeight}px`
+            dragLineEl.style.top = `${minY}px`
+            dragLineEl.style.left = `${targetElPosition[targetDirection]}px`
+
+            dragLineEl.style.borderLeft = '1px dashed #f00'
+          }
+
+          if (!dragLineEl.parentElement) {
+            this.dragContainer!.appendChild(dragLineEl)
+          }
         } else {
-          dragLineEl = this.targetToLineMap.get(target)!
-        }
+          const lineTypeToLines = this.targetToLineMap.get(target)
+          if (lineTypeToLines?.has(lineType)) {
+            const dragLineEl = lineTypeToLines.get(lineType)!
+            dragLineEl.remove()
+            lineTypeToLines.delete(lineType)
 
-        const dragLineElWidth = maxX - minX
-        dragLineEl.style.height = '0px'
-        dragLineEl.style.width = `${dragLineElWidth}px`
-        dragLineEl.style.top = `${targetElPosition['t']}px`
-        dragLineEl.style.left = `${minX}px`
-
-        if (!dragLineEl.parentElement) {
-          this.dragContainer!.appendChild(dragLineEl)
+            if (lineTypeToLines.size === 0) {
+              target.classList.remove(this.options.alignedClassName!)
+            }
+          }
         }
-      } else {
-        this.clearTaegetLine(target)
-      }
+      })
     })
   }
 }

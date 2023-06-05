@@ -40,7 +40,11 @@ onBeforeUnmount(() => {
   border: 1px solid #4100d9;
 }
 
-.active-item {
+/* .active-item {
   background-color: #e66453;
+} */
+
+.aligned-item {
+  opacity: 0.7;
 }
 </style>

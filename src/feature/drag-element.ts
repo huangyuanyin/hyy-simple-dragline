@@ -2,11 +2,18 @@ export interface DragElementOptions {
   container: HTMLElement
   dragHandler?: HTMLElement
   onDragStart?: (event: MouseEvent) => void
-  onDrag?: (event: MouseEvent) => void
+  onDrag?: (event: MouseEvent, startPos: StartPos) => void
   onDragEnd?: (event: MouseEvent) => void
 }
 
-export function registerDragElement(options: DragElementOptions) {
+export interface StartPos {
+  startX: number
+  startY: number
+  startLeft: number
+  startTop: number
+}
+
+export function registerDragElement(options: DragElementOptions, isPreventDrag = false) {
   const { container, dragHandler = container, onDragStart, onDrag, onDragEnd } = options
 
   let isDragging = false
@@ -20,6 +27,7 @@ export function registerDragElement(options: DragElementOptions) {
 
   const onMouseStart = (event: MouseEvent) => {
     isDragging = true
+
     const { clientX: x, clientY: y } = event
     startX = x
     startY = y
@@ -32,15 +40,22 @@ export function registerDragElement(options: DragElementOptions) {
 
   const onMouseMove = (event: MouseEvent) => {
     if (isDragging) {
-      const { clientX: x, clientY: y } = event
+      if (!isPreventDrag) {
+        const { clientX: x, clientY: y } = event
 
-      const deltaX = x - startX
-      const deltaY = y - startY
+        const deltaX = x - startX
+        const deltaY = y - startY
 
-      container.style.left = `${startLeft + deltaX}px`
-      container.style.top = `${startTop + deltaY}px`
+        container.style.left = `${startLeft + deltaX}px`
+        container.style.top = `${startTop + deltaY}px`
+      }
 
-      onDrag?.(event)
+      onDrag?.(event, {
+        startX,
+        startY,
+        startLeft,
+        startTop
+      })
     }
   }
 
