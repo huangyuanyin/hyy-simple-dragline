@@ -71,10 +71,7 @@ export class Dragline {
     const onDragEnd = (event: MouseEvent) => {
       this.removeActiveElement()
       this.clearAllLine()
-      const otherElements = this.getOtheElements()
-      otherElements.forEach((el) => {
-        el.classList.remove(this.options.alignedClassName!)
-      })
+      this.updateElementPosition(container)
       options.onDragEnd?.(event)
     }
 
@@ -123,6 +120,10 @@ export class Dragline {
       lineTypeToLines.forEach((line) => {
         line.remove()
       })
+    })
+    const otherElements = this.getOtheElements()
+    otherElements.forEach((el) => {
+      el.classList.remove(this.options.alignedClassName!)
     })
     this.targetToLineMap.clear()
   }
